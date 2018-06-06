@@ -45,6 +45,27 @@ private[alpakka] object HttpRequests {
       .withUri(requestUri(bucket, None).withQuery(query))
   }
 
+  def createBucket(bucket: String, s3Headers: S3Headers = S3Headers.empty)(implicit ec: ExecutionContext,
+                                                                           conf: S3Settings): Future[HttpRequest] = {
+    val region = conf.s3RegionProvider.getRegion
+    val headers = s3Headers.headers :+ Host(requestAuthority(bucket, region))
+    val httpRequest = HttpRequest(HttpMethods.PUT)
+      .withHeaders(headers: _*)
+      .withUri(requestUri(bucket, None))
+
+    Option(region) match {
+      case Some(r) if r != "us-east-1" =>
+        // region other than us-east-1
+        // @formatter:off
+        val payload = <CreateBucketConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><LocationConstraint>{r}</LocationConstraint></CreateBucketConfiguration>
+        // @formatter:on
+        for {
+          entity <- Marshal(payload).to[RequestEntity]
+        } yield httpRequest.withEntity(entity)
+      case _ => Future.successful(httpRequest)
+    }
+  }
+
   def getDownloadRequest(s3Location: S3Location,
                          method: HttpMethod = HttpMethods.GET,
                          s3Headers: S3Headers = S3Headers.empty,

@@ -10,16 +10,18 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.Uri.Query
 import akka.http.scaladsl.model.headers.{ByteRange, RawHeader}
-import akka.http.scaladsl.model.{HttpEntity, HttpRequest, IllegalUriException, MediaTypes}
+import akka.http.scaladsl.model._
 import akka.stream.ActorMaterializer
 import akka.stream.alpakka.s3.acl.CannedAcl
 import akka.stream.alpakka.s3.{BufferType, MemoryBufferType, Proxy, S3Settings}
-import akka.stream.scaladsl.Source
+import akka.stream.scaladsl.{Sink, Source}
 import akka.testkit.{SocketUtil, TestProbe}
 import com.amazonaws.auth.{AWSCredentialsProvider, AWSStaticCredentialsProvider, AnonymousAWSCredentials}
 import com.amazonaws.regions.AwsRegionProvider
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FlatSpec, Matchers}
+
+import scala.collection.immutable
 
 class HttpRequestsSpec extends FlatSpec with Matchers with ScalaFutures {
 
@@ -384,4 +386,71 @@ class HttpRequestsSpec extends FlatSpec with Matchers with ScalaFutures {
     request.headers should contain(RawHeader("x-amz-copy-source", "/source-bucket/some/source-key?versionId=abcdwxyz"))
     request.headers should contain(RawHeader("x-amz-copy-source-range", "bytes=0-5242879"))
   }
+
+  it should "create bucket request in default region" in {
+    implicit val settings: S3Settings = getSettings()
+
+    implicit val system: ActorSystem = ActorSystem("HttpRequestsSpec")
+    import system.dispatcher
+    implicit val mat: ActorMaterializer = ActorMaterializer()
+
+    val eventualHttpRequest = HttpRequests.createBucket("sample")
+    whenReady(eventualHttpRequest) { httpRequest =>
+      val maybeHostHeader = getHeader("host", httpRequest.headers)
+      maybeHostHeader.fold(fail("Unable to get host header")) { hostHeader =>
+        hostHeader.value() shouldEqual "sample.s3.amazonaws.com"
+      }
+      val eventualEntity = httpRequest.entity.dataBytes.map(_.utf8String).runWith(Sink.head)
+      whenReady(eventualEntity) { entity =>
+        entity shouldBe empty
+        mat.shutdown()
+        system.terminate()
+      }
+    }
+  }
+
+  it should "create bucket request in a region other than default region" in {
+    implicit val settings: S3Settings = getSettings(s3Region = "EU")
+
+    implicit val system: ActorSystem = ActorSystem("HttpRequestsSpec")
+    import system.dispatcher
+    implicit val mat: ActorMaterializer = ActorMaterializer()
+
+    val eventualHttpRequest = HttpRequests.createBucket("sample")
+    whenReady(eventualHttpRequest) { httpRequest =>
+      val maybeHostHeader = getHeader("host", httpRequest.headers)
+      maybeHostHeader.fold(fail("Unable to get host header")) { hostHeader =>
+        hostHeader.value() shouldEqual "sample.s3-eu.amazonaws.com"
+      }
+      val eventualEntity = httpRequest.entity.dataBytes.map(_.utf8String).runWith(Sink.head)
+      whenReady(eventualEntity) { entity =>
+        entity shouldEqual """<CreateBucketConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><LocationConstraint>EU</LocationConstraint></CreateBucketConfiguration>"""
+        mat.shutdown()
+        system.terminate()
+      }
+    }
+  }
+
+  it should "create bucket request with custom header" in {
+    implicit val settings: S3Settings = getSettings()
+
+    implicit val system: ActorSystem = ActorSystem("HttpRequestsSpec")
+    import system.dispatcher
+    implicit val mat: ActorMaterializer = ActorMaterializer()
+
+    val eventualHttpRequest = HttpRequests.createBucket("sample", S3Headers(acl))
+    whenReady(eventualHttpRequest) { httpRequest =>
+      val headers = httpRequest.headers
+      headers should have length 2
+      val maybeAclHeader = getHeader("x-amz-acl", headers)
+      maybeAclHeader.fold(fail("unable to get x-amz-acl")) { aclHeader =>
+        aclHeader.value() shouldEqual acl.value
+        mat.shutdown()
+        system.terminate()
+      }
+    }
+  }
+
+  private def getHeader(lowercaseName: String, headers: immutable.Seq[HttpHeader]): Option[HttpHeader] =
+    headers.find(_.lowercaseName() == lowercaseName)
 }
