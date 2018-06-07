@@ -284,6 +284,8 @@ final class S3Client(val s3Settings: S3Settings)(implicit system: ActorSystem, m
   private[scaladsl] def createBucket(bucket: String, s3Headers: S3Headers = S3Headers.empty): Future[String] =
     impl.createBucket(bucket, s3Headers)
 
+  private[scaladsl] def deleteBucket(bucket: String): Future[Done] = impl.deleteBucket(bucket)
+
   /**
    * Will return a source of object metadata for a given bucket with optional prefix using version 2 of the List Bucket API.
    * This will automatically page through all keys with the given parameters.

@@ -105,11 +105,16 @@ private[alpakka] final class S3Stream(settings: S3Settings)(implicit system: Act
   def createBucket(bucket: String, s3Headers: S3Headers = S3Headers.empty): Future[String] = {
     import mat.executionContext
     HttpRequests
-      .createBucket(bucket, s3Headers)
+      .createBucketRequest(bucket, s3Headers)
       .flatMap(signAndGet)
       .map { response =>
         response.headers.find(_.lowercaseName() == "location").map(_.value()).getOrElse("Unknown")
       }
+  }
+
+  def deleteBucket(bucket: String): Future[Done] = {
+    import mat.executionContext
+    Future.successful(HttpRequests.deleteBucketRequest(bucket)).flatMap(signAndGet).map(_ => Done)
   }
 
   def listBucket(bucket: String, prefix: Option[String] = None): Source[ListBucketResultContents, NotUsed] = {
