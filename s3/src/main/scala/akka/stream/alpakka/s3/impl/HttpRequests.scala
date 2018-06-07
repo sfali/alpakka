@@ -45,25 +45,37 @@ private[alpakka] object HttpRequests {
       .withUri(requestUri(bucket, None).withQuery(query))
   }
 
-  def createBucket(bucket: String, s3Headers: S3Headers = S3Headers.empty)(implicit ec: ExecutionContext,
-                                                                           conf: S3Settings): Future[HttpRequest] = {
+  def createBucketRequest(
+      bucket: String,
+      s3Headers: S3Headers = S3Headers.empty
+  )(implicit ec: ExecutionContext, conf: S3Settings): Future[HttpRequest] = {
     val region = conf.s3RegionProvider.getRegion
+    val httpRequest = bucketRequest(bucket, HttpMethods.PUT, region, s3Headers)
+
+    if (region != "us-east-1") {
+      // region other than us-east-1
+      // @formatter:off
+      val payload = <CreateBucketConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><LocationConstraint>{region}</LocationConstraint></CreateBucketConfiguration>
+      // @formatter:on
+      for {
+        entity <- Marshal(payload).to[RequestEntity]
+      } yield httpRequest.withEntity(entity)
+    } else Future.successful(httpRequest)
+  }
+
+  def deleteBucketRequest(bucket: String)(implicit conf: S3Settings): HttpRequest =
+    bucketRequest(bucket, HttpMethods.DELETE, conf.s3RegionProvider.getRegion)
+
+  private def bucketRequest(bucket: String,
+                            httpMethod: HttpMethod,
+                            region: String,
+                            s3Headers: S3Headers = S3Headers.empty)(
+      implicit conf: S3Settings
+  ): HttpRequest = {
     val headers = s3Headers.headers :+ Host(requestAuthority(bucket, region))
-    val httpRequest = HttpRequest(HttpMethods.PUT)
+    HttpRequest(httpMethod)
       .withHeaders(headers: _*)
       .withUri(requestUri(bucket, None))
-
-    Option(region) match {
-      case Some(r) if r != "us-east-1" =>
-        // region other than us-east-1
-        // @formatter:off
-        val payload = <CreateBucketConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><LocationConstraint>{r}</LocationConstraint></CreateBucketConfiguration>
-        // @formatter:on
-        for {
-          entity <- Marshal(payload).to[RequestEntity]
-        } yield httpRequest.withEntity(entity)
-      case _ => Future.successful(httpRequest)
-    }
   }
 
   def getDownloadRequest(s3Location: S3Location,

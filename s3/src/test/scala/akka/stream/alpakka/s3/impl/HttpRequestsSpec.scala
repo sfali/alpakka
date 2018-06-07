@@ -387,14 +387,14 @@ class HttpRequestsSpec extends FlatSpec with Matchers with ScalaFutures {
     request.headers should contain(RawHeader("x-amz-copy-source-range", "bytes=0-5242879"))
   }
 
-  it should "create bucket request in default region" in {
+  it should "properly construct the create bucket request in default region" in {
     implicit val settings: S3Settings = getSettings()
 
     implicit val system: ActorSystem = ActorSystem("HttpRequestsSpec")
     import system.dispatcher
     implicit val mat: ActorMaterializer = ActorMaterializer()
 
-    val eventualHttpRequest = HttpRequests.createBucket("sample")
+    val eventualHttpRequest = HttpRequests.createBucketRequest("sample")
     whenReady(eventualHttpRequest) { httpRequest =>
       val maybeHostHeader = getHeader("host", httpRequest.headers)
       maybeHostHeader.fold(fail("Unable to get host header")) { hostHeader =>
@@ -409,15 +409,16 @@ class HttpRequestsSpec extends FlatSpec with Matchers with ScalaFutures {
     }
   }
 
-  it should "create bucket request in a region other than default region" in {
+  it should "properly construct the create bucket request in a region other than default region" in {
     implicit val settings: S3Settings = getSettings(s3Region = "EU")
 
     implicit val system: ActorSystem = ActorSystem("HttpRequestsSpec")
     import system.dispatcher
     implicit val mat: ActorMaterializer = ActorMaterializer()
 
-    val eventualHttpRequest = HttpRequests.createBucket("sample")
+    val eventualHttpRequest = HttpRequests.createBucketRequest("sample")
     whenReady(eventualHttpRequest) { httpRequest =>
+      httpRequest.method shouldEqual HttpMethods.PUT
       val maybeHostHeader = getHeader("host", httpRequest.headers)
       maybeHostHeader.fold(fail("Unable to get host header")) { hostHeader =>
         hostHeader.value() shouldEqual "sample.s3-eu.amazonaws.com"
@@ -431,15 +432,16 @@ class HttpRequestsSpec extends FlatSpec with Matchers with ScalaFutures {
     }
   }
 
-  it should "create bucket request with custom header" in {
+  it should "properly construct the create bucket request with custom header" in {
     implicit val settings: S3Settings = getSettings()
 
     implicit val system: ActorSystem = ActorSystem("HttpRequestsSpec")
     import system.dispatcher
     implicit val mat: ActorMaterializer = ActorMaterializer()
 
-    val eventualHttpRequest = HttpRequests.createBucket("sample", S3Headers(acl))
+    val eventualHttpRequest = HttpRequests.createBucketRequest("sample", S3Headers(acl))
     whenReady(eventualHttpRequest) { httpRequest =>
+      httpRequest.method shouldEqual HttpMethods.PUT
       val headers = httpRequest.headers
       headers should have length 2
       val maybeAclHeader = getHeader("x-amz-acl", headers)
@@ -448,6 +450,28 @@ class HttpRequestsSpec extends FlatSpec with Matchers with ScalaFutures {
         mat.shutdown()
         system.terminate()
       }
+    }
+  }
+
+  it should "properly construct the delete bucket request in the default region" in {
+    implicit val settings: S3Settings = getSettings()
+
+    val httpRequest = HttpRequests.deleteBucketRequest("sample")
+    httpRequest.method shouldEqual HttpMethods.DELETE
+    val maybeHostHeader = getHeader("host", httpRequest.headers)
+    maybeHostHeader.fold(fail("Unable to get host header")) { hostHeader =>
+      hostHeader.value() shouldEqual "sample.s3.amazonaws.com"
+    }
+  }
+
+  it should "properly construct the delete bucket request in a region other than default region" in {
+    implicit val settings: S3Settings = getSettings(s3Region = "EU")
+
+    val httpRequest = HttpRequests.deleteBucketRequest("sample")
+    httpRequest.method shouldEqual HttpMethods.DELETE
+    val maybeHostHeader = getHeader("host", httpRequest.headers)
+    maybeHostHeader.fold(fail("Unable to get host header")) { hostHeader =>
+      hostHeader.value() shouldEqual "sample.s3-eu.amazonaws.com"
     }
   }
 
