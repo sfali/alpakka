@@ -102,6 +102,16 @@ private[alpakka] final class S3Stream(settings: S3Settings)(implicit system: Act
     (source, meta)
   }
 
+  def createBucket(bucket: String, s3Headers: S3Headers = S3Headers.empty): Future[String] = {
+    import mat.executionContext
+    HttpRequests
+      .createBucket(bucket, s3Headers)
+      .flatMap(signAndGet)
+      .map { response =>
+        response.headers.find(_.lowercaseName() == "location").map(_.value()).getOrElse("Unknown")
+      }
+  }
+
   def listBucket(bucket: String, prefix: Option[String] = None): Source[ListBucketResultContents, NotUsed] = {
     sealed trait ListBucketState
     case object Starting extends ListBucketState

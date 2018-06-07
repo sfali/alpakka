@@ -281,6 +281,9 @@ final class S3Client(val s3Settings: S3Settings)(implicit system: ActorSystem, m
                sse: Option[ServerSideEncryption] = None): (Source[ByteString, NotUsed], Future[ObjectMetadata]) =
     impl.download(S3Location(bucket, key), range, versionId, sse)
 
+  private[scaladsl] def createBucket(bucket: String, s3Headers: S3Headers = S3Headers.empty): Future[String] =
+    impl.createBucket(bucket, s3Headers)
+
   /**
    * Will return a source of object metadata for a given bucket with optional prefix using version 2 of the List Bucket API.
    * This will automatically page through all keys with the given parameters.
