@@ -63,7 +63,9 @@ jobs:
     - env:
       - PRE_CMD="docker-compose up -d orientdb"
       - CMD=+orientdb/testChanged
-    - env: CMD=+s3/testChanged
+    - env:
+      - PRE_CMD="s3/docker-compose up"
+      - CMD=+s3/testChanged
     - env: CMD=+spring-web/testChanged
     - env: CMD=+simple-codecs/testChanged
     - env: CMD=+slick/testChanged
