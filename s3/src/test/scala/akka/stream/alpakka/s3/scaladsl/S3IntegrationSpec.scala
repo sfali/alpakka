@@ -351,7 +351,7 @@ class MinioS3IntegrationSpec extends S3IntegrationSpec {
   val accessKey = "TESTKEY"
   val secret = "TESTSECRET"
   // TODO: find a way to pass endpoint url, instead of hard code here
-  val endpointUrl = "http://localhost:9001"
+  val endpointUrl = "http://localhost:9000"
 
   val staticProvider = new AWSStaticCredentialsProvider(
     new BasicAWSCredentials(accessKey, secret)
