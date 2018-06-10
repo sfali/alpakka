@@ -4,6 +4,7 @@
 
 package akka.stream.alpakka.s3.scaladsl
 
+import akka.Done
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.ContentTypes
 import akka.stream.ActorMaterializer
@@ -61,6 +62,29 @@ trait S3IntegrationSpec extends FlatSpecLike with BeforeAndAfterAll with Matcher
   lazy val defaultRegionClient = new S3Client(settings)
   lazy val otherRegionClient = new S3Client(otherRegionSettings)
   lazy val version1DefaultRegionClient = new S3Client(listBucketVersion1Settings)
+
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    val eventualResponse = for {
+      r1 <- defaultRegionClient.createBucket(defaultRegionBucket)
+      r2 <- otherRegionClient.createBucket(otherRegionBucket)
+    } yield (r1, r2)
+
+    whenReady(eventualResponse) {
+      case (location1, location2) =>
+        location1 shouldEqual s"/$defaultRegionBucket"
+        location2 shouldEqual s"/$otherRegionBucket"
+    }
+  }
+
+  override protected def afterAll(): Unit = {
+    super.afterAll()
+    val eventualResponse = for {
+      _ <- defaultRegionClient.deleteBucket(defaultRegionBucket)
+      _ <- otherRegionClient.deleteBucket(otherRegionBucket)
+    } yield Done
+    Await.result(eventualResponse, 5.second)
+  }
 
   it should "list with real credentials" in {
     val result = defaultRegionClient.listBucket(defaultRegionBucket, None).runWith(Sink.seq)
@@ -327,6 +351,7 @@ class AWSS3IntegrationSpec extends S3IntegrationSpec
 class MinioS3IntegrationSpec extends S3IntegrationSpec {
   val accessKey = "TESTKEY"
   val secret = "TESTSECRET"
+  // TODO: find a way to pass endpoint url, instead of hard code here
   val endpointUrl = "http://localhost:9000"
 
   val staticProvider = new AWSStaticCredentialsProvider(
